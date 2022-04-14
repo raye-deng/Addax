@@ -33,6 +33,8 @@ import com.wgzhao.addax.common.exception.AddaxException;
 import com.wgzhao.addax.common.plugin.RecordSender;
 import com.wgzhao.addax.common.spi.Reader;
 import com.wgzhao.addax.common.util.Configuration;
+import com.wgzhao.addax.rdbms.util.DBUtilErrorCode;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,12 +50,10 @@ import static com.wgzhao.addax.common.base.Key.QUERY_SQL;
 import static com.wgzhao.addax.common.base.Key.TABLE;
 
 public class InfluxDB2Reader
-        extends Reader
-{
+        extends Reader {
 
     public static class Job
-            extends Reader.Job
-    {
+            extends Reader.Job {
         private static final Logger LOG = LoggerFactory.getLogger(Job.class);
 
         private Configuration originalConfig = null;
@@ -62,19 +62,24 @@ public class InfluxDB2Reader
         private String org;
         private String bucket;
         private String token;
+        private String username;
+        private String password;
         private List<String> columns;
         private List<String> range;
 
         @Override
-        public void init()
-        {
+        public void init() {
             this.originalConfig = super.getPluginJobConf();
         }
 
         @Override
-        public void prepare()
-        {
-            this.token = originalConfig.getNecessaryValue(InfluxDB2Key.TOKEN, InfluxDB2ReaderErrorCode.REQUIRED_VALUE);
+        public void prepare() {
+            this.token = originalConfig.getUnnecessaryValue(InfluxDB2Key.TOKEN, null);
+            this.username = originalConfig.getUnnecessaryValue(InfluxDB2Key.USERNAME, null);
+            this.password = originalConfig.getUnnecessaryValue(InfluxDB2Key.PASSWORD, null);
+            if (StringUtils.isEmpty(this.token) && (StringUtils.isEmpty(this.username) || StringUtils.isEmpty(this.password))) {
+                throw new AddaxException(DBUtilErrorCode.REQUIRED_VALUE, "Either token or username and password must be provided");
+            }
             originalConfig.getNecessaryValue(InfluxDB2Key.RANGE, InfluxDB2ReaderErrorCode.REQUIRED_VALUE);
             this.range = originalConfig.getList(InfluxDB2Key.RANGE, String.class);
             Configuration connConf = Configuration.from(originalConfig.getList(CONNECTION, Object.class).get(0).toString());
@@ -87,8 +92,7 @@ public class InfluxDB2Reader
             this.originalConfig = dealColumns();
         }
 
-        public Configuration dealColumns()
-        {
+        public Configuration dealColumns() {
             Configuration conf = this.originalConfig;
             if (columns.size() == 1 && "*".equals(columns.get(0))) {
                 columns.clear();
@@ -98,7 +102,12 @@ public class InfluxDB2Reader
             // write query sql
             conf.set(QUERY_SQL, querySql);
 
-            InfluxDBClient influxDBClient = InfluxDBClientFactory.create(endpoint, token.toCharArray(), org, bucket);
+            InfluxDBClient influxDBClient;
+            if (StringUtils.isNotEmpty(token)) {
+                influxDBClient = InfluxDBClientFactory.create(endpoint, token.toCharArray(), org, bucket);
+            } else {
+                influxDBClient = InfluxDBClientFactory.createV1(endpoint, username, password.toCharArray(), org, bucket);
+            }
             QueryApi queryApi = influxDBClient.getQueryApi();
             // ONly get schema , so limit records to one
             final List<FluxTable> fluxTables = queryApi.query(querySql + " |> limit(n:1) ");
@@ -123,8 +132,7 @@ public class InfluxDB2Reader
                     map.put("type", col.getDataType());
                     fluxColumns.add(map);
                 }
-            }
-            else {
+            } else {
                 for (String col : columns) {
                     if (labels.contains(col)) {
                         Map<String, String> map = new HashMap<>();
@@ -132,8 +140,7 @@ public class InfluxDB2Reader
                         map.put("name", k.getLabel());
                         map.put("type", k.getDataType());
                         fluxColumns.add(map);
-                    }
-                    else {
+                    } else {
                         throw AddaxException.asAddaxException(InfluxDB2ReaderErrorCode.MISSING_COLUMN,
                                 "The column '" + col + "' you specified doest not exists");
                     }
@@ -145,8 +152,7 @@ public class InfluxDB2Reader
             return conf;
         }
 
-        private String generalQueryQL()
-        {
+        private String generalQueryQL() {
             Configuration connConf = Configuration.from(originalConfig.getList(CONNECTION, Object.class).get(0).toString());
             String bucket = connConf.getString(InfluxDB2Key.BUCKET);
             String startTime = null, endTime = null;
@@ -170,8 +176,7 @@ public class InfluxDB2Reader
                 if (endTime != null) {
                     if (hasStart) {
                         queryBuilder.append(", stop: ").append(endTime);
-                    }
-                    else {
+                    } else {
                         queryBuilder.append("stop: ").append(endTime);
                     }
                 }
@@ -188,10 +193,10 @@ public class InfluxDB2Reader
                 }
                 queryBuilder.append("\") \n");
             }
-            if (! columns.isEmpty()) {
+            if (!columns.isEmpty()) {
                 queryBuilder.append("  |> filter(fn: (r) => r._field ==\"").append(columns.get(0)).append("\" ");
                 if (columns.size() > 1) {
-                    for(int i=1; i<columns.size();i++) {
+                    for (int i = 1; i < columns.size(); i++) {
                         queryBuilder.append(" or r._field == \"").append(columns.get(i)).append("\" ");
                     }
                 }
@@ -205,8 +210,7 @@ public class InfluxDB2Reader
         }
 
         @Override
-        public List<Configuration> split(int adviceNumber)
-        {
+        public List<Configuration> split(int adviceNumber) {
             Configuration readerSliceConfig = super.getPluginJobConf();
             List<Configuration> splitConfigs = new ArrayList<>();
             splitConfigs.add(readerSliceConfig);
@@ -214,24 +218,23 @@ public class InfluxDB2Reader
         }
 
         @Override
-        public void post()
-        {
+        public void post() {
             //
         }
 
         @Override
-        public void destroy()
-        {
+        public void destroy() {
             //
         }
     }
 
     public static class Task
-            extends Reader.Task
-    {
+            extends Reader.Task {
         private static final Logger LOG = LoggerFactory.getLogger(Task.class);
         private String endpoint;
         private String token;
+        private String username;
+        private String password;
         private String org;
         private String bucket;
         private String queryQL;
@@ -239,12 +242,13 @@ public class InfluxDB2Reader
         private List<Map> columns;
 
         @Override
-        public void init()
-        {
+        public void init() {
             Configuration readerSliceConfig = super.getPluginJobConf();
             Configuration connConf = Configuration.from(readerSliceConfig.getList(CONNECTION, Object.class).get(0).toString());
             this.endpoint = connConf.getString(ENDPOINT);
             this.token = readerSliceConfig.getString("token");
+            this.username = readerSliceConfig.getString("username");
+            this.password = readerSliceConfig.getString("password");
             this.org = connConf.getString("org");
             this.bucket = connConf.getString("bucket");
             this.columns = readerSliceConfig.getList(COLUMN, Map.class);
@@ -256,9 +260,14 @@ public class InfluxDB2Reader
         }
 
         @Override
-        public void startRead(RecordSender recordSender)
-        {
-            InfluxDBClient influxDBClient = InfluxDBClientFactory.create(endpoint, token.toCharArray(), org, bucket);
+        public void startRead(RecordSender recordSender) {
+
+            InfluxDBClient influxDBClient;
+            if (StringUtils.isNotEmpty(this.token)) {
+                influxDBClient = InfluxDBClientFactory.create(endpoint, token.toCharArray(), org, bucket);
+            } else {
+                influxDBClient = InfluxDBClientFactory.createV1(endpoint, this.username, this.password.toCharArray(), org, bucket);
+            }
 
             QueryApi queryApi = influxDBClient.getQueryApi();
 
@@ -304,14 +313,12 @@ public class InfluxDB2Reader
         }
 
         @Override
-        public void post()
-        {
+        public void post() {
             //
         }
 
         @Override
-        public void destroy()
-        {
+        public void destroy() {
             //
         }
     }
