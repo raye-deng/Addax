@@ -102,6 +102,11 @@ public class Engine
         }
     }
 
+    /**
+     * 启动Addax
+     * @param args example -job {path_to_job}/job.json
+     * @throws Throwable
+     */
     public static void entry(String[] args)
             throws Throwable
     {
@@ -144,7 +149,7 @@ public class Engine
         }
     }
 
-    public static void main(String[] args)
+    public static void main( String[] args)
     {
         System.out.println("\n  ___      _     _            \n" +
                 " / _ \\    | |   | |           \n" +

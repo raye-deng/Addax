@@ -42,8 +42,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
-public class InfluxDBReaderTask
-{
+public class InfluxDBReaderTask {
     private static final Logger LOG = LoggerFactory.getLogger(InfluxDBReaderTask.class);
 
     private static final int CONNECT_TIMEOUT_SECONDS_DEFAULT = 15;
@@ -58,8 +57,7 @@ public class InfluxDBReaderTask
     private final int connTimeout;
     private final int socketTimeout;
 
-    public InfluxDBReaderTask(Configuration configuration)
-    {
+    public InfluxDBReaderTask(Configuration configuration) {
         List<Object> connList = configuration.getList(InfluxDBKey.CONNECTION);
         Configuration conn = Configuration.from(connList.get(0).toString());
         this.querySql = configuration.getString(InfluxDBKey.QUERY_SQL, null);
@@ -71,18 +69,15 @@ public class InfluxDBReaderTask
         this.socketTimeout = configuration.getInt(InfluxDBKey.SOCKET_TIMEOUT_SECONDS, SOCKET_TIMEOUT_SECONDS_DEFAULT) * 1000;
     }
 
-    public void post()
-    {
+    public void post() {
         //
     }
 
-    public void destroy()
-    {
+    public void destroy() {
         //
     }
 
-    public void startRead(RecordSender recordSender, TaskPluginCollector taskPluginCollector)
-    {
+    public void startRead(RecordSender recordSender, TaskPluginCollector taskPluginCollector) {
         LOG.info("connect influxdb: {} with username: {}", endpoint, username);
 
         String tail = "/query";
@@ -96,13 +91,12 @@ public class InfluxDBReaderTask
             if (!"".equals(password)) {
                 url += "&p=" + URLEncoder.encode(password, enc);
             }
-            if (querySql.contains("#lastMinute#")) {
+            if (StringUtils.isNotEmpty(querySql) && querySql.contains("#lastMinute#")) {
                 this.querySql = querySql.replace("#lastMinute#", getLastMinute());
+                url += "&q=" + URLEncoder.encode(querySql, enc);
             }
-            url += "&q=" + URLEncoder.encode(querySql, enc);
             result = get(url);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             throw AddaxException.asAddaxException(
                     InfluxDBReaderErrorCode.ILLEGAL_VALUE, "Failed to get data point！", e);
         }
@@ -112,6 +106,7 @@ public class InfluxDBReaderTask
                     InfluxDBReaderErrorCode.ILLEGAL_VALUE, "Get nothing!", null);
         }
         try {
+            System.out.println(result);
             JSONObject jsonObject = JSONObject.parseObject(result);
             JSONArray results = (JSONArray) jsonObject.get("results");
             JSONObject resultsMap = (JSONObject) results.get(0);
@@ -126,29 +121,25 @@ public class InfluxDBReaderTask
                         for (Object s : rowArray) {
                             if (null != s) {
                                 record.addColumn(new StringColumn(s.toString()));
-                            }
-                            else {
+                            } else {
                                 record.addColumn(new StringColumn());
                             }
                         }
                         recordSender.sendToWriter(record);
                     }
                 }
-            }
-            else if (resultsMap.containsKey("error")) {
+            } else if (resultsMap.containsKey("error")) {
                 throw AddaxException.asAddaxException(
                         InfluxDBReaderErrorCode.ILLEGAL_VALUE, "Error occurred in data sets！", null);
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             throw AddaxException.asAddaxException(
                     InfluxDBReaderErrorCode.ILLEGAL_VALUE, "Failed to send data", e);
         }
     }
 
     public String get(String url)
-            throws Exception
-    {
+            throws Exception {
         Content content = Request.Get(url)
                 .connectTimeout(this.connTimeout)
                 .socketTimeout(this.socketTimeout)
@@ -161,28 +152,24 @@ public class InfluxDBReaderTask
     }
 
     private String post(String url, Map<String, Object> params)
-            throws Exception
-    {
+            throws Exception {
         return post(url, JSON.toJSONString(params), this.connTimeout, this.socketTimeout);
     }
 
     private String post(String url, String params)
-            throws Exception
-    {
+            throws Exception {
         return post(url, params, this.connTimeout, this.socketTimeout);
     }
 
     private String post(String url, Map<String, Object> params,
-            int connectTimeoutInMill, int socketTimeoutInMill)
-            throws Exception
-    {
+                        int connectTimeoutInMill, int socketTimeoutInMill)
+            throws Exception {
         return post(url, JSON.toJSONString(params), connectTimeoutInMill, socketTimeoutInMill);
     }
 
     private String post(String url, String params,
-            int connectTimeoutInMill, int socketTimeoutInMill)
-            throws Exception
-    {
+                        int connectTimeoutInMill, int socketTimeoutInMill)
+            throws Exception {
         Content content = Request.Post(url)
                 .connectTimeout(connectTimeoutInMill)
                 .socketTimeout(socketTimeoutInMill)
@@ -196,8 +183,7 @@ public class InfluxDBReaderTask
         return content.asString(StandardCharsets.UTF_8);
     }
 
-    private String getLastMinute()
-    {
+    private String getLastMinute() {
         long lastMinuteMilli = LocalDateTime.now().plusMinutes(-1).toInstant(ZoneOffset.of("+8")).toEpochMilli();
         return String.valueOf(lastMinuteMilli);
     }

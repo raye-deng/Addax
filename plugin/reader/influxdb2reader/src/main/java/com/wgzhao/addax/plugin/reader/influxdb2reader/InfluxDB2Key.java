@@ -9,6 +9,8 @@ public final class InfluxDB2Key
     public static final String BUCKET = "bucket";
     public static final String ORG = "org";
     public static final String TOKEN = "token";
+    public static final String USERNAME = "username";
+    public static final String PASSWORD = "password";
     public static final String RANGE = "range";
     public static final String LIMIT = "limit";
 }

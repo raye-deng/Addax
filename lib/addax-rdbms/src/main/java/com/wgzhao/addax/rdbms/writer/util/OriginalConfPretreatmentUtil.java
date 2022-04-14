@@ -40,24 +40,22 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class OriginalConfPretreatmentUtil
-{
+public final class OriginalConfPretreatmentUtil {
     private static final Logger LOG = LoggerFactory.getLogger(OriginalConfPretreatmentUtil.class);
 
     public static DataBaseType dataBaseType;
 
-    private OriginalConfPretreatmentUtil() {}
+    private OriginalConfPretreatmentUtil() {
+    }
 
-    public static void doPretreatment(Configuration originalConfig, DataBaseType dataBaseType)
-    {
+    public static void doPretreatment(Configuration originalConfig, DataBaseType dataBaseType) {
         // 检查 username 配置（必填）
         originalConfig.getNecessaryValue(Key.USERNAME, DBUtilErrorCode.REQUIRED_VALUE);
 
         // 有些数据库没有密码，因此密码不再作为必选项
         if (originalConfig.getString(Key.PASSWORD) == null) {
             originalConfig.set(Key.PASSWORD, "");
-        }
-        else if (originalConfig.getString(Key.PASSWORD).startsWith(Constant.ENC_PASSWORD_PREFIX)) {
+        } else if (originalConfig.getString(Key.PASSWORD).startsWith(Constant.ENC_PASSWORD_PREFIX)) {
             // encrypted password, need to decrypt
             String pass = originalConfig.getString(Key.PASSWORD);
             String decryptPassword = EncryptUtil.decrypt(pass.substring(6, pass.length() - 1));
@@ -71,8 +69,7 @@ public final class OriginalConfPretreatmentUtil
         dealWriteMode(originalConfig, dataBaseType);
     }
 
-    public static void doCheckBatchSize(Configuration originalConfig)
-    {
+    public static void doCheckBatchSize(Configuration originalConfig) {
         // 检查batchSize 配置（选填，如果未填写，则设置为默认值）
         int batchSize = originalConfig.getInt(Key.BATCH_SIZE, Constant.DEFAULT_BATCH_SIZE);
         if (batchSize < 1) {
@@ -84,8 +81,7 @@ public final class OriginalConfPretreatmentUtil
         originalConfig.set(Key.BATCH_SIZE, batchSize);
     }
 
-    public static void simplifyConf(Configuration originalConfig)
-    {
+    public static void simplifyConf(Configuration originalConfig) {
         List<Configuration> connections = originalConfig.getListConfiguration(Key.CONNECTION);
         int tableNum = 0;
 
@@ -128,20 +124,17 @@ public final class OriginalConfPretreatmentUtil
         originalConfig.set(Constant.TABLE_NUMBER_MARK, tableNum);
     }
 
-    public static void dealColumnConf(Configuration originalConfig, ConnectionFactory connectionFactory, String oneTable)
-    {
+    public static void dealColumnConf(Configuration originalConfig, ConnectionFactory connectionFactory, String oneTable) {
         List<String> userConfiguredColumns = originalConfig.getList(Key.COLUMN, String.class);
         if (null == userConfiguredColumns || userConfiguredColumns.isEmpty()) {
             throw AddaxException.asAddaxException(DBUtilErrorCode.ILLEGAL_VALUE,
                     "您的配置文件中的列配置信息有误. 因为您未配置写入数据库表的列名称，获取不到列信息. 请检查您的配置并作出修改.");
-        }
-        else {
+        } else {
             boolean isPreCheck = originalConfig.getBool(Key.DRY_RUN, false);
             List<String> allColumns;
             if (isPreCheck) {
                 allColumns = DBUtil.getTableColumnsByConn(connectionFactory.getConnectionWithoutRetry(), oneTable);
-            }
-            else {
+            } else {
                 allColumns = DBUtil.getTableColumnsByConn(connectionFactory.getConnection(), oneTable);
             }
 
@@ -153,25 +146,23 @@ public final class OriginalConfPretreatmentUtil
 
                 // 回填其值，需要以 String 的方式转交后续处理
                 originalConfig.set(Key.COLUMN, allColumns);
-            }
-            else if (userConfiguredColumns.size() > allColumns.size()) {
+            } else if (userConfiguredColumns.size() > allColumns.size()) {
                 throw AddaxException.asAddaxException(DBUtilErrorCode.ILLEGAL_VALUE,
                         String.format("您的配置文件中的列配置信息有误. 因为您所配置的写入数据库表的字段个数:%s 大于目的表的总字段总个数:%s. " +
                                 "请检查您的配置并作出修改.", userConfiguredColumns.size(), allColumns.size()));
-            }
-            else {
+            } else {
                 // 确保用户配置的 column 不重复
                 ListUtil.makeSureNoValueDuplicate(userConfiguredColumns, false);
                 // 检查列是否都为数据库表中正确的列（通过执行一次 select column from table 进行判断）
                 java.sql.Connection connection = connectionFactory.getConnection();
-                DBUtil.getColumnMetaData(connection, oneTable, StringUtils.join(userConfiguredColumns, ","));
+                String columnsString = "`" + StringUtils.join(userConfiguredColumns, "`,`") + "`";
+                DBUtil.getColumnMetaData(connection, oneTable, columnsString);
                 DBUtil.closeDBResources(null, null, connection);
             }
         }
     }
 
-    public static void dealColumnConf(Configuration originalConfig)
-    {
+    public static void dealColumnConf(Configuration originalConfig) {
         String jdbcUrl = originalConfig.getString(String.format("%s[0].%s", Key.CONNECTION, Key.JDBC_URL));
         String username = originalConfig.getString(Key.USERNAME);
         String password = originalConfig.getString(Key.PASSWORD);
@@ -181,8 +172,7 @@ public final class OriginalConfPretreatmentUtil
         dealColumnConf(originalConfig, jdbcConnectionFactory, oneTable);
     }
 
-    public static void dealWriteMode(Configuration originalConfig, DataBaseType dataBaseType)
-    {
+    public static void dealWriteMode(Configuration originalConfig, DataBaseType dataBaseType) {
         List<String> columns = originalConfig.getList(Key.COLUMN, String.class);
 
         String jdbcUrl = originalConfig.getString(String.format("%s[0].%s", Key.CONNECTION, Key.JDBC_URL));
