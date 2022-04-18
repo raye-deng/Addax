@@ -45,13 +45,11 @@ import java.util.Set;
 /**
  * Engine是 Addax 入口类，该类负责初始化Job或者Task的运行容器，并运行插件的Job或者Task逻辑
  */
-public class Engine
-{
+public class Engine {
     private static final Logger LOG = LoggerFactory.getLogger(Engine.class);
 
     /* check job model (job/task) first */
-    public void start(Configuration allConf)
-    {
+    public void start(Configuration allConf) {
 
         // 绑定column转换信息
         ColumnCast.bind(allConf);
@@ -76,8 +74,7 @@ public class Engine
     }
 
     // 注意屏蔽敏感信息
-    public static String filterJobConfiguration(final Configuration configuration)
-    {
+    public static String filterJobConfiguration(final Configuration configuration) {
         Configuration jobConfWithSetting = configuration.getConfiguration("job").clone();
 
         Configuration jobContent = jobConfWithSetting.getConfiguration("content");
@@ -89,8 +86,7 @@ public class Engine
         return jobConfWithSetting.beautify();
     }
 
-    public static void filterSensitiveConfiguration(Configuration configuration)
-    {
+    public static void filterSensitiveConfiguration(Configuration configuration) {
         Set<String> keys = configuration.getKeys();
         for (String key : keys) {
             boolean isSensitive = StringUtils.endsWithIgnoreCase(key, "password")
@@ -104,12 +100,16 @@ public class Engine
 
     /**
      * 启动Addax
+     *
      * @param args example -job {path_to_job}/job.json
      * @throws Throwable
      */
     public static void entry(String[] args)
-            throws Throwable
-    {
+            throws Throwable {
+        System.setProperty("addax.home", "/Users/raye.deng/Documents/workspace/Addax/target/addax/addax-4.0.9-SNAPSHOT");
+        String addaxHome = System.getProperty("addax.home");
+        LOG.info("addax home: {}", addaxHome);
+
         Options options = new Options();
         options.addOption("job", true, "Job config.");
 
@@ -117,7 +117,8 @@ public class Engine
         CommandLine cl = parser.parse(options, args);
 
         String jobPath = cl.getOptionValue("job");
-        Configuration configuration = ConfigParser.parse(jobPath);
+        LOG.info("job path: {}", jobPath);
+        Configuration configuration = ConfigParser.parseFromFile(jobPath);
 
         // job id 默认值为-1
         configuration.set(CoreConstant.CORE_CONTAINER_JOB_ID, -1);
@@ -137,20 +138,33 @@ public class Engine
         engine.start(configuration);
     }
 
-    public static String getVersion()
-    {
+    public static void entry(String configuration) throws Throwable {
+        try {
+            String addaxHome = System.getProperty("addax.home");
+            LOG.info("addax home: {}", addaxHome);
+            Configuration conf = ConfigParser.parse(configuration);
+            // job id 默认值为-1
+//        conf.set(CoreConstant.CORE_CONTAINER_JOB_ID, -1);
+            LOG.info("\n{}\n", Engine.filterJobConfiguration(conf));
+            ConfigurationValidate.doValidate(conf);
+            Engine engine = new Engine();
+            engine.start(conf);
+        } catch (Throwable e) {
+            LOG.error("job execution failed:", e);
+        }
+    }
+
+    public static String getVersion() {
         try {
             final Properties properties = new Properties();
             properties.load(Engine.class.getClassLoader().getResourceAsStream("project.properties"));
             return properties.getProperty("version");
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             return null;
         }
     }
 
-    public static void main( String[] args)
-    {
+    public static void main(String[] args) {
         System.out.println("\n  ___      _     _            \n" +
                 " / _ \\    | |   | |           \n" +
                 "/ /_\\ \\ __| | __| | __ ___  __\n" +
@@ -166,8 +180,7 @@ public class Engine
 
         try {
             Engine.entry(args);
-        }
-        catch (Throwable e) {
+        } catch (Throwable e) {
             exitCode = 2;
             e.printStackTrace();
             if (e instanceof AddaxException) {
