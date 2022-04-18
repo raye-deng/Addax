@@ -78,7 +78,7 @@ public class InfluxDBReaderTask {
     }
 
     public void startRead(RecordSender recordSender, TaskPluginCollector taskPluginCollector) {
-        LOG.info("connect influxdb: {} with username: {}", endpoint, username);
+        LOG.info("connect influxdb: {} with username: {},password:{}", endpoint, username, password);
 
         String tail = "/query";
         String enc = "utf-8";
@@ -93,8 +93,11 @@ public class InfluxDBReaderTask {
             }
             if (StringUtils.isNotEmpty(querySql) && querySql.contains("#lastMinute#")) {
                 this.querySql = querySql.replace("#lastMinute#", getLastMinute());
+            }
+            if (StringUtils.isNotEmpty(querySql)) {
                 url += "&q=" + URLEncoder.encode(querySql, enc);
             }
+            LOG.info("query influxdb: {}", url);
             result = get(url);
         } catch (Exception e) {
             throw AddaxException.asAddaxException(
